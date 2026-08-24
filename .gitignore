@@ -4,7 +4,7 @@ __pycache__/
 .DS_Store
 
 # Kuzu runtime database
-medical_db/
+# medical_db/
 
 # Local datasets
 data/opentargets/
