@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Kuzu runtime database
+data/medical_db/
+
+# Local datasets
+data/opentargets/
+data/fda/
+
+# Environment/secrets
+.env
+.env.*
+scripts/
