@@ -10,7 +10,7 @@ from app.sources.evidence_provider import MedicalEvidenceProvider
 from app.sources.fda import OpenFDADataSource
 from app.sources.label_selector import FDALabelSelector
 from app.use_cases.medical_queries import MedicalQueryUseCase
-
+from app.sources.kuzu import KuzuEvidenceSource
 
 @lru_cache
 def get_app_settings() -> Settings:
@@ -21,7 +21,7 @@ def build_query_engine() -> MedicalQueryEngine:
     settings = get_app_settings()
 
     repository = KuzuGraphRepository(
-        settings.database_path
+    settings.database_path
     )
 
     service = MedicalKnowledgeService(
@@ -38,6 +38,9 @@ def build_query_engine() -> MedicalQueryEngine:
         repository.connection
     )
 
+    graph_source = KuzuEvidenceSource(
+        repository
+    )
 
     fda_source = OpenFDADataSource(
         timeout=settings.fda_timeout_seconds
@@ -46,10 +49,10 @@ def build_query_engine() -> MedicalQueryEngine:
     label_selector = FDALabelSelector()
 
     evidence_provider = MedicalEvidenceProvider(
+        graph_source=graph_source,
         fda_source=fda_source,
         label_selector=label_selector,
     )
-
     return MedicalQueryEngine(
         parser=parser,
         resolver=resolver,
