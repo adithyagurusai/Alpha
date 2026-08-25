@@ -5,8 +5,8 @@ from app.api.schemas import (
     QueryRequest,
     QueryResponse,
 )
-from app.query.engine import MedicalQueryEngine
-from app.response.formatter import MedicalResponseFormatter
+from app.query.modes import QueryMode
+from app.query.orchestrator import QueryOrchestrator
 
 
 router = APIRouter()
@@ -21,33 +21,61 @@ async def query_medical_knowledge(
     http_request: Request,
 ) -> QueryResponse:
 
-    engine: MedicalQueryEngine = (
+    orchestrator: QueryOrchestrator = (
         http_request.app.state.query_engine
     )
 
-    result = engine.execute(
-        request.query
-    )
-
-    formatter = MedicalResponseFormatter()
-
-    response = formatter.format(
+    result = orchestrator.execute(
         request.query,
-        result,
+        mode=QueryMode.AUTO,
     )
 
     return QueryResponse(
-        success=response.success,
-        query=response.query,
-        answer=response.answer,
+        success=result.success,
+        query=result.query,
+        answer=result.answer,
         evidence=[
             EvidenceResponse(
-                source=item.source,
-                type=item.type,
-                title=item.title,
-                content=item.content,
+                source=str(
+                    item.get(
+                        "source",
+                        "Kuzu medical graph",
+                    )
+                ),
+                type=str(
+                    item.get(
+                        "type",
+                        "graph",
+                    )
+                ),
+                title=str(
+                    item.get(
+                        "title",
+                        item.get(
+                            "data",
+                            {},
+                        ).get(
+                            "target",
+                            "",
+                        )
+                        if isinstance(
+                            item.get("data"),
+                            dict,
+                        )
+                        else "",
+                    )
+                ),
+                content=str(
+                    item.get(
+                        "content",
+                        item.get(
+                            "data",
+                            "",
+                        ),
+                    )
+                ),
             )
-            for item in response.evidence
+            for item in result.evidence
         ],
-        error=response.error,
+        error=result.error,
     )
