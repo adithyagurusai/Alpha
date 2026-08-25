@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Drug:
-    id: int
+    id: str
     name: str
 
 
@@ -13,41 +13,41 @@ class Target:
     name: str
     external_id: str
     approved_name: str
-    target_class: str
 
 
 @dataclass(frozen=True, slots=True)
 class Disease:
-    id: int
+    id: str
     name: str
 
 
 @dataclass(frozen=True, slots=True)
 class Pathway:
-    id: int
+    id: str
     name: str
 
 
 @dataclass(frozen=True, slots=True)
+class TargetClass:
+    class_key: str
+    id: int
+    label: str
+    level: str
+
+
+@dataclass(frozen=True, slots=True)
 class DrugTarget:
-    drug_id: int
+    drug_id: str
     drug_name: str
     target: Target
 
 
 @dataclass(frozen=True, slots=True)
 class DrugIndication:
-    drug_id: int
+    drug_id: str
     drug_name: str
     disease: Disease
     max_clinical_stage: str
-
-
-@dataclass(frozen=True, slots=True)
-class DrugInteraction:
-    drug_id: int
-    drug_name: str
-    interacting_drug: Drug
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,17 +66,20 @@ class TargetDiseaseAssociation:
 
 
 @dataclass(frozen=True, slots=True)
-class FDALabel:
+class TargetProtein:
+    protein_key: str
     id: str
-    set_id: str
-    effective_time: str
-    version: str
-    spl_id: str
-    title: str
+    source: str
 
 
 @dataclass(frozen=True, slots=True)
-class FDASection:
+class TargetGO:
     id: str
-    section: str
-    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class TargetTractability:
+    tractability_key: str
+    modality: str
+    id: str
+    value: bool

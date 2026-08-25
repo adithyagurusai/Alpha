@@ -1,16 +1,11 @@
 from dataclasses import dataclass
 
-from app.domain.entities import (
-    DrugIndication,
-    DrugInteraction,
-    DrugTarget,
-    FDASection,
+from app.query.deterministic_parser import (
+    DeterministicQueryParser,
+    ParsedIntent,
 )
-from app.query.deterministic_parser import DeterministicQueryParser
 from app.query.entity_resolver import EntityResolver
-from app.query.parser import ParsedIntent
 from app.sources.evidence_provider import MedicalEvidenceProvider
-from app.sources.models import ExternalEvidence
 from app.use_cases.medical_queries import MedicalQueryUseCase
 
 
@@ -26,7 +21,7 @@ class QueryResult:
 
 
 class MedicalQueryEngine:
-    """Execute supported natural-language medical queries."""
+    """Execute supported Xpharma graph queries."""
 
     def __init__(
         self,
@@ -52,12 +47,13 @@ class MedicalQueryEngine:
                 message="Unsupported medical query.",
             )
 
+        # ==============================================================
+        # DRUG QUERIES
+        # ==============================================================
+
         if parsed.intent in {
             ParsedIntent.DRUG_TARGET,
             ParsedIntent.DRUG_DISEASE,
-            ParsedIntent.DRUG_INTERACTION,
-            ParsedIntent.DRUG_CONTRAINDICATION,
-            ParsedIntent.DRUG_ADVERSE_EFFECT,
         }:
             resolved = self.resolver.resolve_drug(
                 parsed.entity
@@ -76,35 +72,82 @@ class MedicalQueryEngine:
                 )
 
             drug_id = resolved.drug.id
-            drug_name = resolved.drug.name
 
             if parsed.intent == ParsedIntent.DRUG_TARGET:
-                data: list[DrugTarget] = (
-                    self.use_case.drug_targets(drug_id)
+                data = self.use_case.drug_targets(
+                    drug_id
                 )
 
-            elif parsed.intent == ParsedIntent.DRUG_DISEASE:
+            else:
                 data = self.use_case.drug_indications(
                     drug_id
                 )
 
-            elif parsed.intent == ParsedIntent.DRUG_INTERACTION:
-                data = self.use_case.drug_interactions(
-                    drug_id
+            return QueryResult(
+                success=True,
+                intent=parsed.intent,
+                entity=parsed.entity,
+                data=data,
+            )
+
+        # ==============================================================
+        # TARGET QUERIES
+        # ==============================================================
+
+        if parsed.intent in {
+            ParsedIntent.TARGET_PATHWAY,
+            ParsedIntent.TARGET_DISEASE,
+            ParsedIntent.TARGET_CLASS,
+            ParsedIntent.TARGET_PROTEIN,
+            ParsedIntent.TARGET_GO,
+            ParsedIntent.TARGET_TRACTABILITY,
+        }:
+            resolved = self.resolver.resolve_target(
+                parsed.entity
+            )
+
+            if resolved is None:
+                return QueryResult(
+                    success=False,
+                    intent=parsed.intent,
+                    entity=parsed.entity,
+                    data=None,
+                    message=(
+                        f"Target '{parsed.entity}' "
+                        "was not found."
+                    ),
                 )
 
-            elif parsed.intent == ParsedIntent.DRUG_CONTRAINDICATION:
-                data = self.evidence_provider.get_fda_evidence(
-                    drug_id=drug_id,
-                    drug_name=drug_name,
-                    section="contraindications",
+            target_id = resolved.target.id
+
+            if parsed.intent == ParsedIntent.TARGET_PATHWAY:
+                data = self.use_case.target_pathways(
+                    target_id
+                )
+
+            elif parsed.intent == ParsedIntent.TARGET_DISEASE:
+                data = self.use_case.target_disease_associations(
+                    target_id
+                )
+
+            elif parsed.intent == ParsedIntent.TARGET_CLASS:
+                data = self.use_case.target_classes(
+                    target_id
+                )
+
+            elif parsed.intent == ParsedIntent.TARGET_PROTEIN:
+                data = self.use_case.target_proteins(
+                    target_id
+                )
+
+            elif parsed.intent == ParsedIntent.TARGET_GO:
+                data = self.use_case.target_go(
+                    target_id
                 )
 
             else:
-                data = self.evidence_provider.get_fda_evidence(
-                    drug_id=drug_id,
-                    drug_name=drug_name,
-                    section="adverse_reactions",
+                data = self.use_case.target_tractability(
+                    target_id
                 )
 
             return QueryResult(

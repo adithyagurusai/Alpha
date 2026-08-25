@@ -10,8 +10,7 @@ class Settings:
     """Application configuration."""
 
     project_root: Path = PROJECT_ROOT
-    database_path: Path = PROJECT_ROOT / "medical_db"
-
+    database_path: Path = PROJECT_ROOT / "data" / "xpharma_graph"
     app_name: str = "Xpharma Medical Knowledge API"
     app_version: str = "0.1.0"
 

@@ -1,15 +1,19 @@
 from app.domain.entities import (
     DrugIndication,
-    DrugInteraction,
     DrugTarget,
-    FDASection,
+    TargetClass,
+    TargetDiseaseAssociation,
+    TargetGO,
+    TargetPathway,
+    TargetProtein,
+    TargetTractability,
 )
 from app.query.engine import QueryResult
 from app.response.models import EvidenceItem, MedicalResponse
 
 
 class MedicalResponseFormatter:
-    """Convert structured query results into user-facing responses."""
+    """Convert Xpharma graph query results into user-facing responses."""
 
     def format(
         self,
@@ -21,12 +25,13 @@ class MedicalResponseFormatter:
             return MedicalResponse(
                 success=False,
                 query=query,
-                answer=result.message or "Unable to answer the query.",
+                answer=(
+                    result.message
+                    or "Unable to answer the query."
+                ),
                 evidence=[],
                 error=result.message,
             )
-
-        data = result.data or []
 
         if result.intent is None:
             return MedicalResponse(
@@ -36,6 +41,12 @@ class MedicalResponseFormatter:
                 evidence=[],
                 error="Missing query intent.",
             )
+
+        data = result.data or []
+
+        # ------------------------------------------------------------
+        # Drug queries
+        # ------------------------------------------------------------
 
         if result.intent.value == "drug_target":
             return self._format_drug_targets(
@@ -49,17 +60,42 @@ class MedicalResponseFormatter:
                 data,
             )
 
-        if result.intent.value == "drug_interaction":
-            return self._format_drug_interactions(
+        # ------------------------------------------------------------
+        # Target queries
+        # ------------------------------------------------------------
+
+        if result.intent.value == "target_pathway":
+            return self._format_target_pathways(
                 query,
                 data,
             )
 
-        if result.intent.value in {
-            "drug_contraindication",
-            "drug_adverse_effect",
-        }:
-            return self._format_fda_sections(
+        if result.intent.value == "target_disease":
+            return self._format_target_diseases(
+                query,
+                data,
+            )
+
+        if result.intent.value == "target_class":
+            return self._format_target_classes(
+                query,
+                data,
+            )
+
+        if result.intent.value == "target_protein":
+            return self._format_target_proteins(
+                query,
+                data,
+            )
+
+        if result.intent.value == "target_go":
+            return self._format_target_go(
+                query,
+                data,
+            )
+
+        if result.intent.value == "target_tractability":
+            return self._format_target_tractability(
                 query,
                 data,
             )
@@ -71,6 +107,10 @@ class MedicalResponseFormatter:
             evidence=[],
             error="Unsupported response type.",
         )
+
+    # ================================================================
+    # DRUG → TARGET
+    # ================================================================
 
     def _format_drug_targets(
         self,
@@ -110,7 +150,7 @@ class MedicalResponseFormatter:
                     type="TARGET_RELATIONSHIP",
                     title=target.target.name,
                     content=(
-                        f"{target.drug_name} targets "
+                        f"{drug_name} targets "
                         f"{target.target.name}."
                     ),
                 )
@@ -122,6 +162,10 @@ class MedicalResponseFormatter:
             answer="\n".join(lines),
             evidence=evidence,
         )
+
+    # ================================================================
+    # DRUG → DISEASE
+    # ================================================================
 
     def _format_drug_indications(
         self,
@@ -142,7 +186,7 @@ class MedicalResponseFormatter:
         drug_name = indications[0].drug_name
 
         lines = [
-            f"{drug_name} clinical indications:"
+            f"{drug_name} clinical-stage disease associations:"
         ]
 
         evidence: list[EvidenceItem] = []
@@ -161,8 +205,9 @@ class MedicalResponseFormatter:
                     type="CLINICAL_INDICATION",
                     title=indication.disease.name,
                     content=(
-                        f"{drug_name} is indicated for "
-                        f"{indication.disease.name}."
+                        f"{drug_name} is associated with "
+                        f"{indication.disease.name} "
+                        f"at {indication.max_clinical_stage}."
                     ),
                 )
             )
@@ -174,45 +219,49 @@ class MedicalResponseFormatter:
             evidence=evidence,
         )
 
-    def _format_drug_interactions(
+    # ================================================================
+    # TARGET → PATHWAY
+    # ================================================================
+
+    def _format_target_pathways(
         self,
         query: str,
         data: object,
     ) -> MedicalResponse:
 
-        interactions = data if isinstance(data, list) else []
+        pathways = data if isinstance(data, list) else []
 
-        if not interactions:
+        if not pathways:
             return MedicalResponse(
                 success=True,
                 query=query,
-                answer="No drug interactions were found.",
+                answer="No pathway relationships were found.",
                 evidence=[],
             )
 
-        drug_name = interactions[0].drug_name
+        target_name = pathways[0].target_name
 
         lines = [
-            f"{drug_name} interactions:"
+            f"{target_name} participates in:"
         ]
 
         evidence: list[EvidenceItem] = []
 
-        for item in interactions:
-            interaction: DrugInteraction = item
+        for item in pathways:
+            pathway: TargetPathway = item
 
             lines.append(
-                f"- {interaction.interacting_drug.name}"
+                f"- {pathway.pathway.name}"
             )
 
             evidence.append(
                 EvidenceItem(
                     source="Kuzu medical graph",
-                    type="DRUG_INTERACTION",
-                    title=interaction.interacting_drug.name,
+                    type="PATHWAY_RELATIONSHIP",
+                    title=pathway.pathway.name,
                     content=(
-                        f"{drug_name} interacts with "
-                        f"{interaction.interacting_drug.name}."
+                        f"{target_name} participates in "
+                        f"{pathway.pathway.name}."
                     ),
                 )
             )
@@ -224,45 +273,270 @@ class MedicalResponseFormatter:
             evidence=evidence,
         )
 
-    def _format_fda_sections(
+    # ================================================================
+    # TARGET → DISEASE
+    # ================================================================
+
+    def _format_target_diseases(
         self,
         query: str,
         data: object,
     ) -> MedicalResponse:
 
-        evidence_items = (
-            data
-            if isinstance(data, list)
-            else []
+        associations = (
+            data if isinstance(data, list) else []
         )
 
-        if not evidence_items:
+        if not associations:
             return MedicalResponse(
                 success=True,
                 query=query,
-                answer="No FDA evidence was found.",
+                answer="No disease associations were found.",
                 evidence=[],
             )
 
-        first = evidence_items[0]
+        target_name = associations[0].target_name
 
         lines = [
-            f"FDA evidence — {first.evidence_type}:"
+            f"{target_name} is associated with:"
         ]
 
         evidence: list[EvidenceItem] = []
 
-        for item in evidence_items:
+        for item in associations:
+            association: TargetDiseaseAssociation = item
+
             lines.append(
-                f"\n{item.content}"
+                f"- {association.disease.name} "
+                f"(score: {association.score:.4f})"
             )
 
             evidence.append(
                 EvidenceItem(
-                    source=item.source,
-                    type=item.evidence_type,
-                    title=item.title,
-                    content=item.content,
+                    source="Kuzu medical graph",
+                    type="DISEASE_ASSOCIATION",
+                    title=association.disease.name,
+                    content=(
+                        f"{target_name} is associated with "
+                        f"{association.disease.name} "
+                        f"with an association score of "
+                        f"{association.score:.4f}."
+                    ),
+                )
+            )
+
+        return MedicalResponse(
+            success=True,
+            query=query,
+            answer="\n".join(lines),
+            evidence=evidence,
+        )
+
+    # ================================================================
+    # TARGET → CLASS
+    # ================================================================
+
+    def _format_target_classes(
+        self,
+        query: str,
+        data: object,
+    ) -> MedicalResponse:
+
+        classes = data if isinstance(data, list) else []
+
+        if not classes:
+            return MedicalResponse(
+                success=True,
+                query=query,
+                answer="No target classification was found.",
+                evidence=[],
+            )
+
+        lines = [
+            "Target classification:"
+        ]
+
+        evidence: list[EvidenceItem] = []
+
+        for item in classes:
+            target_class: TargetClass = item
+
+            lines.append(
+                f"- {target_class.level}: "
+                f"{target_class.label}"
+            )
+
+            evidence.append(
+                EvidenceItem(
+                    source="Kuzu medical graph",
+                    type="TARGET_CLASS",
+                    title=target_class.label,
+                    content=(
+                        f"{target_class.level}: "
+                        f"{target_class.label}."
+                    ),
+                )
+            )
+
+        return MedicalResponse(
+            success=True,
+            query=query,
+            answer="\n".join(lines),
+            evidence=evidence,
+        )
+
+    # ================================================================
+    # TARGET → PROTEIN
+    # ================================================================
+
+    def _format_target_proteins(
+        self,
+        query: str,
+        data: object,
+    ) -> MedicalResponse:
+
+        proteins = data if isinstance(data, list) else []
+
+        if not proteins:
+            return MedicalResponse(
+                success=True,
+                query=query,
+                answer="No associated proteins were found.",
+                evidence=[],
+            )
+
+        lines = [
+            "Associated proteins:"
+        ]
+
+        evidence: list[EvidenceItem] = []
+
+        for item in proteins:
+            protein: TargetProtein = item
+
+            lines.append(
+                f"- {protein.id} "
+                f"({protein.source})"
+            )
+
+            evidence.append(
+                EvidenceItem(
+                    source="Kuzu medical graph",
+                    type="PROTEIN_ASSOCIATION",
+                    title=protein.id,
+                    content=(
+                        f"Protein {protein.id} "
+                        f"from {protein.source}."
+                    ),
+                )
+            )
+
+        return MedicalResponse(
+            success=True,
+            query=query,
+            answer="\n".join(lines),
+            evidence=evidence,
+        )
+
+    # ================================================================
+    # TARGET → GO
+    # ================================================================
+
+    def _format_target_go(
+        self,
+        query: str,
+        data: object,
+    ) -> MedicalResponse:
+
+        terms = data if isinstance(data, list) else []
+
+        if not terms:
+            return MedicalResponse(
+                success=True,
+                query=query,
+                answer="No GO terms were found.",
+                evidence=[],
+            )
+
+        lines = [
+            "Associated GO terms:"
+        ]
+
+        evidence: list[EvidenceItem] = []
+
+        for item in terms:
+            go: TargetGO = item
+
+            lines.append(
+                f"- {go.id}"
+            )
+
+            evidence.append(
+                EvidenceItem(
+                    source="Kuzu medical graph",
+                    type="GO_ASSOCIATION",
+                    title=go.id,
+                    content=(
+                        f"Associated Gene Ontology term: "
+                        f"{go.id}."
+                    ),
+                )
+            )
+
+        return MedicalResponse(
+            success=True,
+            query=query,
+            answer="\n".join(lines),
+            evidence=evidence,
+        )
+
+    # ================================================================
+    # TARGET → TRACTABILITY
+    # ================================================================
+
+    def _format_target_tractability(
+        self,
+        query: str,
+        data: object,
+    ) -> MedicalResponse:
+
+        tractability = (
+            data if isinstance(data, list) else []
+        )
+
+        if not tractability:
+            return MedicalResponse(
+                success=True,
+                query=query,
+                answer="No tractability information was found.",
+                evidence=[],
+            )
+
+        lines = [
+            "Target tractability:"
+        ]
+
+        evidence: list[EvidenceItem] = []
+
+        for item in tractability:
+            value: TargetTractability = item
+
+            status = "Yes" if value.value else "No"
+
+            lines.append(
+                f"- {value.modality} | "
+                f"{value.id}: {status}"
+            )
+
+            evidence.append(
+                EvidenceItem(
+                    source="Kuzu medical graph",
+                    type="TRACTABILITY",
+                    title=value.id,
+                    content=(
+                        f"{value.modality} / {value.id}: "
+                        f"{status}."
+                    ),
                 )
             )
 

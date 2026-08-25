@@ -21,16 +21,24 @@ class ResolvedDisease:
 
 
 class EntityResolver:
-    """Resolve user-facing entity names to canonical graph entities."""
+    """Resolve user-facing names to canonical Xpharma graph entities."""
 
-    def __init__(self, connection: kuzu.Connection) -> None:
+    def __init__(
+        self,
+        connection: kuzu.Connection,
+    ) -> None:
         self.connection = connection
 
-    def resolve_drug(self, name: str) -> ResolvedDrug | None:
+    def resolve_drug(
+        self,
+        name: str,
+    ) -> ResolvedDrug | None:
+
         result = self.connection.execute(
             """
             MATCH (drug:Drug)
-            WHERE upper(trim(drug.name)) = upper(trim($name))
+            WHERE upper(trim(drug.name)) =
+                  upper(trim($name))
             RETURN
                 drug.id,
                 drug.name
@@ -46,22 +54,27 @@ class EntityResolver:
 
         return ResolvedDrug(
             drug=Drug(
-                id=int(drug_id),
+                id=str(drug_id),
                 name=str(drug_name),
             )
         )
 
-    def resolve_target(self, name: str) -> ResolvedTarget | None:
+    def resolve_target(
+        self,
+        name: str,
+    ) -> ResolvedTarget | None:
+
         result = self.connection.execute(
             """
             MATCH (target:Target)
-            WHERE upper(trim(target.name)) = upper(trim($name))
+            WHERE target.name = $name
+            OR target.approved_name = $name
+            OR target.external_id = $name
             RETURN
                 target.id,
                 target.name,
                 target.external_id,
-                target.approved_name,
-                target.target_class
+                target.approved_name
             LIMIT 1;
             """,
             {"name": name},
@@ -75,7 +88,6 @@ class EntityResolver:
             target_name,
             external_id,
             approved_name,
-            target_class,
         ) = result.get_next()
 
         return ResolvedTarget(
@@ -84,15 +96,19 @@ class EntityResolver:
                 name=str(target_name),
                 external_id=str(external_id),
                 approved_name=str(approved_name),
-                target_class=str(target_class),
             )
         )
 
-    def resolve_disease(self, name: str) -> ResolvedDisease | None:
+    def resolve_disease(
+        self,
+        name: str,
+    ) -> ResolvedDisease | None:
+
         result = self.connection.execute(
             """
             MATCH (disease:Disease)
-            WHERE upper(trim(disease.name)) = upper(trim($name))
+            WHERE upper(trim(disease.name)) =
+                  upper(trim($name))
             RETURN
                 disease.id,
                 disease.name
@@ -108,7 +124,7 @@ class EntityResolver:
 
         return ResolvedDisease(
             disease=Disease(
-                id=int(disease_id),
+                id=str(disease_id),
                 name=str(disease_name),
             )
         )

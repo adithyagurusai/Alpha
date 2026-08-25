@@ -5,11 +5,13 @@ from enum import Enum
 class ParsedIntent(str, Enum):
     DRUG_TARGET = "drug_target"
     DRUG_DISEASE = "drug_disease"
-    DRUG_INTERACTION = "drug_interaction"
+
     TARGET_PATHWAY = "target_pathway"
     TARGET_DISEASE = "target_disease"
-    DRUG_CONTRAINDICATION = "drug_contraindication"
-    DRUG_ADVERSE_EFFECT = "drug_adverse_effect"
+    TARGET_CLASS = "target_class"
+    TARGET_PROTEIN = "target_protein"
+    TARGET_GO = "target_go"
+    TARGET_TRACTABILITY = "target_tractability"
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,99 +21,165 @@ class ParsedQuery:
 
 
 class DeterministicQueryParser:
-    """Classify supported medical queries using explicit rules."""
+    """Classify supported Xpharma graph queries using explicit rules."""
 
     def parse(self, query: str) -> ParsedQuery | None:
         normalized = self._normalize(query)
 
         rules = (
+            # Drug → Target
             (
                 ParsedIntent.DRUG_TARGET,
-                (
-                    "what does ",
-                    " target",
-                ),
+                "what does ",
+                " target",
+            ),
+            (
+                ParsedIntent.DRUG_TARGET,
+                "what are the targets of ",
+                "",
+            ),
+            (
+                ParsedIntent.DRUG_TARGET,
+                "targets of ",
+                "",
+            ),
+
+            # Drug → Disease
+            (
+                ParsedIntent.DRUG_DISEASE,
+                "what diseases does ",
+                " treat",
             ),
             (
                 ParsedIntent.DRUG_DISEASE,
-                (
-                    "what diseases does ",
-                    " treat",
-                ),
+                "what is ",
+                " used for",
             ),
             (
                 ParsedIntent.DRUG_DISEASE,
-                (
-                    "what is ",
-                    " used for",
-                ),
+                "indications for ",
+                "",
             ),
             (
                 ParsedIntent.DRUG_DISEASE,
-                (
-                    "indications for ",
-                    "",
-                ),
+                "what are the indications for ",
+                "",
+            ),
+
+            # Target → Pathway
+            (
+                ParsedIntent.TARGET_PATHWAY,
+                "what pathways is ",
+                " involved in",
             ),
             (
-                ParsedIntent.DRUG_INTERACTION,
-                (
-                    "what drugs interact with ",
-                    "",
-                ),
+                ParsedIntent.TARGET_PATHWAY,
+                "what pathways does ",
+                " participate in",
             ),
             (
-                ParsedIntent.DRUG_INTERACTION,
-                (
-                    "drug interactions for ",
-                    "",
-                ),
+                ParsedIntent.TARGET_PATHWAY,
+                "pathways for ",
+                "",
             ),
             (
-                ParsedIntent.DRUG_INTERACTION,
-                (
-                    "interactions of ",
-                    "",
-                ),
+                ParsedIntent.TARGET_PATHWAY,
+                "pathways of ",
+                "",
+            ),
+
+            # Target → Disease
+            (
+                ParsedIntent.TARGET_DISEASE,
+                "what diseases is ",
+                " associated with",
             ),
             (
-                ParsedIntent.DRUG_CONTRAINDICATION,
-                (
-                    "what are the contraindications of ",
-                    "",
-                ),
+                ParsedIntent.TARGET_DISEASE,
+                "diseases associated with ",
+                "",
             ),
             (
-                ParsedIntent.DRUG_CONTRAINDICATION,
-                (
-                    "contraindications for ",
-                    "",
-                ),
+                ParsedIntent.TARGET_DISEASE,
+                "what diseases are associated with ",
+                "",
+            ),
+
+            # Target → Class
+            (
+                ParsedIntent.TARGET_CLASS,
+                "what class is ",
+                "",
             ),
             (
-                ParsedIntent.DRUG_ADVERSE_EFFECT,
-                (
-                    "what are the adverse effects of ",
-                    "",
-                ),
+                ParsedIntent.TARGET_CLASS,
+                "what is the target class of ",
+                "",
             ),
             (
-                ParsedIntent.DRUG_ADVERSE_EFFECT,
-                (
-                    "what are the side effects of ",
-                    "",
-                ),
+                ParsedIntent.TARGET_CLASS,
+                "target class of ",
+                "",
             ),
             (
-                ParsedIntent.DRUG_ADVERSE_EFFECT,
-                (
-                    "side effects of ",
-                    "",
-                ),
+                ParsedIntent.TARGET_CLASS,
+                "classification of ",
+                "",
+            ),
+
+            # Target → Protein
+            (
+                ParsedIntent.TARGET_PROTEIN,
+                "what proteins are associated with ",
+                "",
+            ),
+            (
+                ParsedIntent.TARGET_PROTEIN,
+                "proteins associated with ",
+                "",
+            ),
+            (
+                ParsedIntent.TARGET_PROTEIN,
+                "proteins for ",
+                "",
+            ),
+
+            # Target → GO
+            (
+                ParsedIntent.TARGET_GO,
+                "what go terms are associated with ",
+                "",
+            ),
+            (
+                ParsedIntent.TARGET_GO,
+                "go terms associated with ",
+                "",
+            ),
+            (
+                ParsedIntent.TARGET_GO,
+                "go terms for ",
+                "",
+            ),
+
+            # Target → Tractability
+            (
+                ParsedIntent.TARGET_TRACTABILITY,
+                "what is the tractability of ",
+                "",
+            ),
+            (
+                ParsedIntent.TARGET_TRACTABILITY,
+                "tractability of ",
+                "",
+            ),
+            (
+                ParsedIntent.TARGET_TRACTABILITY,
+                "how tractable is ",
+                "",
             ),
         )
 
-        for intent, (prefix, suffix) in rules:
+        for intent, prefix, suffix in rules:
             entity = self._extract_entity(
                 normalized,
                 prefix,
@@ -128,8 +196,12 @@ class DeterministicQueryParser:
 
     @staticmethod
     def _normalize(query: str) -> str:
+        """
+        Normalize query formatting without changing
+        the casing of biomedical entity identifiers.
+        """
         return " ".join(
-            query.strip().lower().rstrip("?").split()
+            query.strip().rstrip("?").split()
         )
 
     @staticmethod
@@ -138,11 +210,16 @@ class DeterministicQueryParser:
         prefix: str,
         suffix: str,
     ) -> str | None:
-        if not query.startswith(prefix):
+
+        # Query language is case-insensitive, but entity
+        # identifiers must retain their original casing.
+        query_lower = query.lower()
+
+        if not query_lower.startswith(prefix):
             return None
 
         if suffix:
-            if not query.endswith(suffix):
+            if not query_lower.endswith(suffix):
                 return None
 
             entity = query[
@@ -154,4 +231,4 @@ class DeterministicQueryParser:
         if not entity:
             return None
 
-        return entity.upper()
+        return entity

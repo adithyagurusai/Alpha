@@ -4,17 +4,18 @@ from typing import Any, cast
 import kuzu
 
 from app.domain.entities import (
+    Disease,
     Drug,
     DrugIndication,
-    DrugInteraction,
     DrugTarget,
-    Disease,
-    FDASection,
-    FDALabel,
     Pathway,
     Target,
+    TargetClass,
     TargetDiseaseAssociation,
+    TargetGO,
     TargetPathway,
+    TargetProtein,
+    TargetTractability,
 )
 
 
@@ -26,25 +27,49 @@ class KuzuGraphRepository:
         self.connection = kuzu.Connection(self.database)
 
     def close(self) -> None:
-        """Close the Kuzu connection."""
         self.connection.close()
 
     @staticmethod
     def _row_values(row: Any) -> tuple[Any, ...]:
-        """
-        Normalize a Kuzu result row for type checking.
-
-        Kuzu's Python type information exposes query rows as a broad union.
-        The repository is the boundary where those values become typed
-        application data.
-        """
         return cast(tuple[Any, ...], row)
 
-    def get_drug_targets(self, drug_id: int) -> list[DrugTarget]:
-        """Return all targets associated with a drug."""
+    # ================================================================
+    # DRUG
+    # ================================================================
+
+    def get_drug(self, drug_id: str) -> Drug | None:
         result = self.connection.execute(
             """
-            MATCH (drug:Drug)-[:TARGETS]->(target:Target)
+            MATCH (drug:Drug)
+            WHERE drug.id = $drug_id
+            RETURN drug.id, drug.name
+            LIMIT 1;
+            """,
+            {"drug_id": drug_id},
+        )
+
+        if not result.has_next():
+            return None
+
+        row = self._row_values(result.get_next())
+
+        return Drug(
+            id=cast(str, row[0]),
+            name=cast(str, row[1]),
+        )
+
+    # ================================================================
+    # DRUG → TARGET
+    # ================================================================
+
+    def get_drug_targets(
+        self,
+        drug_id: str,
+    ) -> list[DrugTarget]:
+
+        result = self.connection.execute(
+            """
+            MATCH (drug:Drug)-[r:TARGETS]->(target:Target)
             WHERE drug.id = $drug_id
             RETURN
                 drug.id,
@@ -53,7 +78,8 @@ class KuzuGraphRepository:
                 target.name,
                 target.external_id,
                 target.approved_name,
-                target.target_class
+                r.action_type,
+                r.mechanism_of_action
             ORDER BY target.name;
             """,
             {"drug_id": drug_id},
@@ -61,7 +87,9 @@ class KuzuGraphRepository:
 
         rows: list[DrugTarget] = []
 
-        for row in result.get_all():
+        while result.has_next():
+            row = self._row_values(result.get_next())
+
             (
                 retrieved_drug_id,
                 drug_name,
@@ -69,30 +97,34 @@ class KuzuGraphRepository:
                 target_name,
                 external_id,
                 approved_name,
-                target_class,
+                _action_type,
+                _mechanism_of_action,
             ) = row
 
             rows.append(
                 DrugTarget(
-                    drug_id=cast(int, retrieved_drug_id),
+                    drug_id=cast(str, retrieved_drug_id),
                     drug_name=cast(str, drug_name),
                     target=Target(
                         id=cast(int, target_id),
                         name=cast(str, target_name),
                         external_id=cast(str, external_id),
                         approved_name=cast(str, approved_name),
-                        target_class=cast(str, target_class),
                     ),
                 )
             )
 
         return rows
 
+    # ================================================================
+    # DRUG → DISEASE
+    # ================================================================
+
     def get_drug_indications(
         self,
-        drug_id: int,
+        drug_id: str,
     ) -> list[DrugIndication]:
-        """Return diseases for which a drug has a clinical indication."""
+
         result = self.connection.execute(
             """
             MATCH (drug:Drug)-[r:INDICATED_FOR]->(disease:Disease)
@@ -123,10 +155,10 @@ class KuzuGraphRepository:
 
             rows.append(
                 DrugIndication(
-                    drug_id=cast(int, retrieved_drug_id),
+                    drug_id=cast(str, retrieved_drug_id),
                     drug_name=cast(str, drug_name),
                     disease=Disease(
-                        id=cast(int, disease_id),
+                        id=cast(str, disease_id),
                         name=cast(str, disease_name),
                     ),
                     max_clinical_stage=cast(str, clinical_stage),
@@ -135,55 +167,132 @@ class KuzuGraphRepository:
 
         return rows
 
-    def get_drug_interactions(
+    # ================================================================
+    # DISEASE
+    # ================================================================
+
+    def get_disease(
         self,
-        drug_id: int,
-    ) -> list[DrugInteraction]:
-        """Return drugs that interact with the specified drug."""
+        disease_id: str,
+    ) -> Disease | None:
+
         result = self.connection.execute(
             """
-            MATCH (drug:Drug)-[:INTERACTS_WITH]->(other:Drug)
-            WHERE drug.id = $drug_id
-            RETURN
-                drug.id,
-                drug.name,
-                other.id,
-                other.name
-            ORDER BY other.name;
+            MATCH (disease:Disease)
+            WHERE disease.id = $disease_id
+            RETURN disease.id, disease.name
+            LIMIT 1;
             """,
-            {"drug_id": drug_id},
+            {"disease_id": disease_id},
         )
 
-        rows: list[DrugInteraction] = []
+        if not result.has_next():
+            return None
+
+        row = self._row_values(result.get_next())
+
+        return Disease(
+            id=cast(str, row[0]),
+            name=cast(str, row[1]),
+        )
+
+    # ================================================================
+    # TARGET
+    # ================================================================
+
+    def get_target(
+        self,
+        target_id: int,
+    ) -> Target | None:
+
+        result = self.connection.execute(
+            """
+            MATCH (target:Target)
+            WHERE target.id = $target_id
+            RETURN
+                target.id,
+                target.name,
+                target.external_id,
+                target.approved_name
+            LIMIT 1;
+            """,
+            {"target_id": target_id},
+        )
+
+        if not result.has_next():
+            return None
+
+        row = self._row_values(result.get_next())
+
+        return Target(
+            id=cast(int, row[0]),
+            name=cast(str, row[1]),
+            external_id=cast(str, row[2]),
+            approved_name=cast(str, row[3]),
+        )
+
+    # ================================================================
+    # TARGET → DISEASE
+    # ================================================================
+
+    def get_target_disease_associations(
+        self,
+        target_id: int,
+    ) -> list[TargetDiseaseAssociation]:
+
+        result = self.connection.execute(
+            """
+            MATCH (target:Target)-[r:ASSOCIATED_WITH]->(disease:Disease)
+            WHERE target.id = $target_id
+            RETURN
+                target.id,
+                target.name,
+                disease.id,
+                disease.name,
+                r.association_score
+            ORDER BY
+                r.association_score DESC,
+                disease.name;
+            """,
+            {"target_id": target_id},
+        )
+
+        rows: list[TargetDiseaseAssociation] = []
 
         while result.has_next():
             row = self._row_values(result.get_next())
 
             (
-                retrieved_drug_id,
-                drug_name,
-                other_id,
-                other_name,
+                retrieved_target_id,
+                target_name,
+                disease_id,
+                disease_name,
+                score,
             ) = row
 
             rows.append(
-                DrugInteraction(
-                    drug_id=cast(int, retrieved_drug_id),
-                    drug_name=cast(str, drug_name),
-                    interacting_drug=Drug(
-                        id=cast(int, other_id),
-                        name=cast(str, other_name),
+                TargetDiseaseAssociation(
+                    target_id=cast(int, retrieved_target_id),
+                    target_name=cast(str, target_name),
+                    disease=Disease(
+                        id=cast(str, disease_id),
+                        name=cast(str, disease_name),
                     ),
+                    score=cast(float, score),
                 )
             )
 
         return rows
 
+    # ================================================================
+    # TARGET → PATHWAY
+    # ================================================================
+
     def get_target_pathways(
         self,
         target_id: int,
     ) -> list[TargetPathway]:
-        """Return pathways associated with a target."""
+
         result = self.connection.execute(
             """
             MATCH (target:Target)-[:PARTICIPATES_IN]->(pathway:Pathway)
@@ -215,7 +324,7 @@ class KuzuGraphRepository:
                     target_id=cast(int, retrieved_target_id),
                     target_name=cast(str, target_name),
                     pathway=Pathway(
-                        id=cast(int, pathway_id),
+                        id=cast(str, pathway_id),
                         name=cast(str, pathway_name),
                     ),
                 )
@@ -223,166 +332,158 @@ class KuzuGraphRepository:
 
         return rows
 
-    def get_target_disease_associations(
+    # ================================================================
+    # TARGET → TARGET CLASS
+    # ================================================================
+
+    def get_target_classes(
         self,
         target_id: int,
-    ) -> list[TargetDiseaseAssociation]:
-        """Return diseases associated with a target."""
+    ) -> list[TargetClass]:
+
         result = self.connection.execute(
             """
-            MATCH (target:Target)-[r:ASSOCIATED_WITH]->(disease:Disease)
+            MATCH (target:Target)-[:HAS_TARGET_CLASS]->(class:TargetClass)
             WHERE target.id = $target_id
             RETURN
-                target.id,
-                target.name,
-                disease.id,
-                disease.name,
-                r.score
-            ORDER BY r.score DESC, disease.name;
+                class.class_key,
+                class.id,
+                class.label,
+                class.level
+            ORDER BY class.level;
             """,
             {"target_id": target_id},
         )
 
-        rows: list[TargetDiseaseAssociation] = []
+        rows: list[TargetClass] = []
 
         while result.has_next():
             row = self._row_values(result.get_next())
 
-            (
-                retrieved_target_id,
-                target_name,
-                disease_id,
-                disease_name,
-                score,
-            ) = row
+            class_key, class_id, label, level = row
 
             rows.append(
-                TargetDiseaseAssociation(
-                    target_id=cast(int, retrieved_target_id),
-                    target_name=cast(str, target_name),
-                    disease=Disease(
-                        id=cast(int, disease_id),
-                        name=cast(str, disease_name),
-                    ),
-                    score=cast(float, score),
+                TargetClass(
+                    class_key=cast(str, class_key),
+                    id=cast(int, class_id),
+                    label=cast(str, label),
+                    level=cast(str, level),
                 )
             )
 
         return rows
 
-    def get_latest_fda_label(
+    # ================================================================
+    # TARGET → PROTEIN
+    # ================================================================
+
+    def get_target_proteins(
         self,
-        drug_id: int,
-    ) -> FDALabel | None:
-        """Return the latest FDA label associated with a drug."""
+        target_id: int,
+    ) -> list[TargetProtein]:
+
         result = self.connection.execute(
             """
-            MATCH (drug:Drug)-[:HAS_FDA_LABEL]->(label:FDALabel)
-            WHERE drug.id = $drug_id
+            MATCH (target:Target)-[:HAS_PROTEIN]->(protein:Protein)
+            WHERE target.id = $target_id
             RETURN
-                label.id,
-                label.set_id,
-                label.effective_time,
-                label.version,
-                label.spl_id,
-                label.title
-            ORDER BY label.effective_time DESC, label.version DESC
-            LIMIT 1;
+                protein.protein_key,
+                protein.id,
+                protein.source
+            ORDER BY protein.source, protein.id;
             """,
-            {"drug_id": drug_id},
+            {"target_id": target_id},
         )
 
-        if not result.has_next():
-            return None
+        rows: list[TargetProtein] = []
 
-        row = self._row_values(result.get_next())
+        while result.has_next():
+            protein_key, protein_id, source = result.get_next()
 
-        (
-            label_id,
-            set_id,
-            effective_time,
-            version,
-            spl_id,
-            title,
-        ) = row
+            rows.append(
+                TargetProtein(
+                    protein_key=cast(str, protein_key),
+                    id=cast(str, protein_id),
+                    source=cast(str, source),
+                )
+            )
 
-        return FDALabel(
-            id=cast(str, label_id),
-            set_id=cast(str, set_id),
-            effective_time=cast(str, effective_time),
-            version=cast(str, version),
-            spl_id=cast(str, spl_id),
-            title=cast(str, title),
-        )
+        return rows
 
-    def get_fda_sections(
+    # ================================================================
+    # TARGET → GO
+    # ================================================================
+
+    def get_target_go(
         self,
-        drug_id: int,
-        section: str | None = None,
-        ) -> list[FDASection]:
-        """Return sections from the latest FDA label for a drug."""
+        target_id: int,
+    ) -> list[TargetGO]:
 
-        if section is None:
-            result = self.connection.execute(
-                """
-                MATCH (drug:Drug)-[:HAS_FDA_LABEL]->(label:FDALabel)
-                WHERE drug.id = $drug_id
+        result = self.connection.execute(
+            """
+            MATCH (target:Target)-[:HAS_GO]->(go:GO)
+            WHERE target.id = $target_id
+            RETURN go.id
+            ORDER BY go.id;
+            """,
+            {"target_id": target_id},
+        )
 
-                WITH drug, label
-                ORDER BY label.effective_time DESC, label.version DESC
-                LIMIT 1
+        rows: list[TargetGO] = []
 
-                MATCH (label)-[:HAS_SECTION]->(section:FDASection)
+        while result.has_next():
+            row = self._row_values(result.get_next())
 
-                RETURN
-                    section.id,
-                    section.section,
-                    section.text
-
-                ORDER BY section.section;
-                """,
-                {"drug_id": drug_id},
-            )
-        else:
-            result = self.connection.execute(
-                """
-                MATCH (drug:Drug)-[:HAS_FDA_LABEL]->(label:FDALabel)
-                WHERE drug.id = $drug_id
-
-                WITH drug, label
-                ORDER BY label.effective_time DESC, label.version DESC
-                LIMIT 1
-
-                MATCH (label)-[:HAS_SECTION]->(section:FDASection)
-                WHERE section.section = $section
-
-                RETURN
-                    section.id,
-                    section.section,
-                    section.text
-
-                ORDER BY section.section;
-                """,
-                {
-                    "drug_id": drug_id,
-                    "section": section,
-                },
+            rows.append(
+                TargetGO(id=cast(str, row[0]))
             )
 
-        rows: list[FDASection] = []
+        return rows
+
+    # ================================================================
+    # TARGET → TRACTABILITY
+    # ================================================================
+
+    def get_target_tractability(
+        self,
+        target_id: int,
+    ) -> list[TargetTractability]:
+
+        result = self.connection.execute(
+            """
+            MATCH (target:Target)-[:HAS_TRACTABILITY]->(
+                tractability:Tractability
+            )
+            WHERE target.id = $target_id
+            RETURN
+                tractability.tractability_key,
+                tractability.modality,
+                tractability.id,
+                tractability.value
+            ORDER BY
+                tractability.modality,
+                tractability.id,
+                tractability.value;
+            """,
+            {"target_id": target_id},
+        )
+
+        rows: list[TargetTractability] = []
 
         while result.has_next():
             (
-                section_id,
-                section_name,
-                text,
+                tractability_key,
+                modality,
+                tractability_id,
+                value,
             ) = result.get_next()
 
             rows.append(
-                FDASection(
-                    id=str(section_id),
-                    section=str(section_name),
-                    text=str(text),
+                TargetTractability(
+                    tractability_key=cast(str, tractability_key),
+                    modality=cast(str, modality),
+                    id=cast(str, tractability_id),
+                    value=cast(bool, value),
                 )
             )
 

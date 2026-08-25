@@ -14,3 +14,5 @@ data/fda/
 .env.*
 scripts/
 medical_db
+
+data/

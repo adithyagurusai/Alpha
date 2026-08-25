@@ -21,7 +21,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         description=(
             "Graph-first medical knowledge API powered by Kuzu "
-            "with FDA fallback support."
+            "with external FDA evidence support"
         ),
         lifespan=lifespan,
     )

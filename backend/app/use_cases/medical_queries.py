@@ -1,17 +1,18 @@
 from app.domain.entities import (
     DrugIndication,
-    DrugInteraction,
     DrugTarget,
-    FDASection,
-    FDALabel,
+    TargetClass,
     TargetDiseaseAssociation,
+    TargetGO,
     TargetPathway,
+    TargetProtein,
+    TargetTractability,
 )
 from app.services.medical_knowledge import MedicalKnowledgeService
 
 
 class MedicalQueryUseCase:
-    """Execute deterministic medical knowledge queries."""
+    """Execute deterministic Xpharma medical graph queries."""
 
     def __init__(
         self,
@@ -19,20 +20,25 @@ class MedicalQueryUseCase:
     ) -> None:
         self.service = service
 
-    def drug_targets(self, drug_id: int) -> list[DrugTarget]:
+    # ================================================================
+    # DRUG
+    # ================================================================
+
+    def drug_targets(
+        self,
+        drug_id: str,
+    ) -> list[DrugTarget]:
         return self.service.get_drug_targets(drug_id)
 
     def drug_indications(
         self,
-        drug_id: int,
+        drug_id: str,
     ) -> list[DrugIndication]:
         return self.service.get_drug_indications(drug_id)
 
-    def drug_interactions(
-        self,
-        drug_id: int,
-    ) -> list[DrugInteraction]:
-        return self.service.get_drug_interactions(drug_id)
+    # ================================================================
+    # TARGET
+    # ================================================================
 
     def target_pathways(
         self,
@@ -40,24 +46,36 @@ class MedicalQueryUseCase:
     ) -> list[TargetPathway]:
         return self.service.get_target_pathways(target_id)
 
-    def target_diseases(
+    def target_disease_associations(
         self,
         target_id: int,
     ) -> list[TargetDiseaseAssociation]:
-        return self.service.get_target_disease_associations(target_id)
+        return self.service.get_target_disease_associations(
+            target_id
+        )
 
-    def latest_fda_label(
+    def target_classes(
         self,
-        drug_id: int,
-    ) -> FDALabel | None:
-        return self.service.get_latest_fda_label(drug_id)
+        target_id: int,
+    ) -> list[TargetClass]:
+        return self.service.get_target_classes(target_id)
 
-    def fda_sections(
+    def target_proteins(
         self,
-        drug_id: int,
-        section: str | None = None,
-    ) -> list[FDASection]:
-        return self.service.get_fda_sections(
-            drug_id,
-            section,
+        target_id: int,
+    ) -> list[TargetProtein]:
+        return self.service.get_target_proteins(target_id)
+
+    def target_go(
+        self,
+        target_id: int,
+    ) -> list[TargetGO]:
+        return self.service.get_target_go(target_id)
+
+    def target_tractability(
+        self,
+        target_id: int,
+    ) -> list[TargetTractability]:
+        return self.service.get_target_tractability(
+            target_id
         )

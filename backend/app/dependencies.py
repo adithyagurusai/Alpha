@@ -8,7 +8,6 @@ from app.query.entity_resolver import EntityResolver
 from app.services.medical_knowledge import MedicalKnowledgeService
 from app.sources.evidence_provider import MedicalEvidenceProvider
 from app.sources.fda import OpenFDADataSource
-from app.sources.kuzu import KuzuEvidenceSource
 from app.sources.label_selector import FDALabelSelector
 from app.use_cases.medical_queries import MedicalQueryUseCase
 
@@ -39,9 +38,6 @@ def build_query_engine() -> MedicalQueryEngine:
         repository.connection
     )
 
-    graph_source = KuzuEvidenceSource(
-        repository
-    )
 
     fda_source = OpenFDADataSource(
         timeout=settings.fda_timeout_seconds
@@ -50,7 +46,6 @@ def build_query_engine() -> MedicalQueryEngine:
     label_selector = FDALabelSelector()
 
     evidence_provider = MedicalEvidenceProvider(
-        graph_source=graph_source,
         fda_source=fda_source,
         label_selector=label_selector,
     )
