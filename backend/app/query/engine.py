@@ -11,7 +11,7 @@ from app.use_cases.medical_queries import MedicalQueryUseCase
 
 @dataclass(frozen=True, slots=True)
 class QueryResult:
-    """Structured result returned by the query engine."""
+    """Structured result returned by the deterministic query engine."""
 
     success: bool
     intent: ParsedIntent | None
@@ -47,10 +47,6 @@ class MedicalQueryEngine:
                 message="Unsupported medical query.",
             )
 
-        # ==============================================================
-        # DRUG QUERIES
-        # ==============================================================
-
         if parsed.intent in {
             ParsedIntent.DRUG_TARGET,
             ParsedIntent.DRUG_DISEASE,
@@ -77,7 +73,6 @@ class MedicalQueryEngine:
                 data = self.use_case.drug_targets(
                     drug_id
                 )
-
             else:
                 data = self.use_case.drug_indications(
                     drug_id
@@ -89,10 +84,6 @@ class MedicalQueryEngine:
                 entity=parsed.entity,
                 data=data,
             )
-
-        # ==============================================================
-        # TARGET QUERIES
-        # ==============================================================
 
         if parsed.intent in {
             ParsedIntent.TARGET_PATHWAY,

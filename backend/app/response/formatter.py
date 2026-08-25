@@ -303,7 +303,7 @@ class MedicalResponseFormatter:
 
         evidence: list[EvidenceItem] = []
 
-        for item in associations:
+        for item in sorted(associations, key=lambda x: x.score, reverse=True)[:10]:
             association: TargetDiseaseAssociation = item
 
             lines.append(
@@ -524,8 +524,9 @@ class MedicalResponseFormatter:
             status = "Yes" if value.value else "No"
 
             lines.append(
-                f"- {value.modality} | "
-                f"{value.id}: {status}"
+                f"- {value.id} | "
+                f"modality: {value.modality} | "
+                f"value: {status}"
             )
 
             evidence.append(
@@ -534,8 +535,9 @@ class MedicalResponseFormatter:
                     type="TRACTABILITY",
                     title=value.id,
                     content=(
-                        f"{value.modality} / {value.id}: "
-                        f"{status}."
+                        f"{value.id} | "
+                        f"modality: {value.modality} | "
+                        f"value: {status}."
                     ),
                 )
             )
@@ -543,6 +545,6 @@ class MedicalResponseFormatter:
         return MedicalResponse(
             success=True,
             query=query,
-            answer="\n".join(lines),
+            answer="\\n".join(lines),
             evidence=evidence,
         )

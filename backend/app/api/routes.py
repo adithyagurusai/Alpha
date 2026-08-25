@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Request
-
+from fastapi import APIRouter, HTTPException, Request
+from app.api.rate_limit import RateLimiter
 from app.api.schemas import (
+
     EvidenceResponse,
     QueryRequest,
     QueryResponse,
@@ -10,7 +11,10 @@ from app.query.orchestrator import QueryOrchestrator
 
 
 router = APIRouter()
-
+rate_limiter = RateLimiter(
+    max_requests=14,
+    window_seconds=60,
+)
 
 @router.post(
     "/query",
@@ -20,7 +24,17 @@ async def query_medical_knowledge(
     request: QueryRequest,
     http_request: Request,
 ) -> QueryResponse:
+    client_ip = (
+        http_request.client.host
+        if http_request.client
+        else "unknown"
+    )
 
+    if not rate_limiter.allow(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please try again later.",
+        )
     orchestrator: QueryOrchestrator = (
         http_request.app.state.query_engine
     )

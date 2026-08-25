@@ -9,7 +9,7 @@ from app.query.orchestrator import QueryOrchestrator
 from app.query.semantic.engine import SemanticQueryEngine
 from app.query.semantic.kuzu_retriever import KuzuSemanticRetriever
 from app.query.semantic.query_analyzer import SemanticQueryAnalyzer
-from app.query.semantic.simple_generator import SimpleAnswerGenerator
+from app.query.semantic.generator import GeminiAnswerGenerator
 from app.services.medical_knowledge import MedicalKnowledgeService
 from app.sources.evidence_provider import MedicalEvidenceProvider
 from app.sources.fda import OpenFDADataSource
@@ -87,7 +87,7 @@ def build_query_engine() -> QueryOrchestrator:
         analyzer=analyzer,
     )
 
-    generator = SimpleAnswerGenerator()
+    generator = GeminiAnswerGenerator()
 
     semantic_engine = SemanticQueryEngine(
         retriever=retriever,

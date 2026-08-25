@@ -16,3 +16,5 @@ scripts/
 medical_db
 
 data/
+logs/
+tests/
